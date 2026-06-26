@@ -12,8 +12,8 @@
  * tools+model+system-prompt, not a prose hint.
  *
  * Bound today: `tools` (allowlist), `disallowedTools` (denylist), `model`,
- * and the markdown body (`prompt`). Parsed-but-ignored for now (documented):
- * `mcp`, `skills`, `background`, `isolation` — each is wired independently later.
+ * `isolation`, and the markdown body (`prompt`). Parsed-but-ignored for now (documented):
+ * `mcp`, `skills`, `background` — each is wired independently later.
  */
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -33,6 +33,8 @@ export interface AgentDefinition {
   disallowedTools?: string[];
   /** Model spec (`provider/modelId` or bare id) for this subagent. */
   model?: string;
+  /** When "worktree", the subagent runs in an isolated git worktree. "none" is the default. */
+  isolation?: 'worktree' | 'none';
   /** Markdown body, prepended to the subagent's task as role guidance. */
   prompt: string;
   /** Where the definition was loaded from (project wins over user). */
@@ -75,6 +77,7 @@ export function parseAgentDefinition(
     tools: toStringArray(fm.tools),
     disallowedTools: toStringArray(fm.disallowedTools),
     model: typeof fm.model === "string" ? fm.model.trim() || undefined : undefined,
+    isolation: fm.isolation === 'worktree' ? 'worktree' : undefined,
     prompt,
     source,
   };
@@ -156,6 +159,7 @@ export function agentDefinitionKey(def: AgentDefinition | undefined): string | n
     tools: def.tools ?? null,
     disallowedTools: def.disallowedTools ?? null,
     model: def.model ?? null,
+    isolation: def.isolation ?? null,
     prompt: def.prompt,
   });
 }

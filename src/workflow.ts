@@ -424,9 +424,12 @@ export async function runWorkflow<T = unknown>(
       options.onAgentStart?.({ label, phase: assignedPhase, prompt, model: displayModel });
 
       // Optional per-agent worktree isolation (deterministic name -> stable resume keys).
+      // Inline agentOptions.isolation takes precedence; the agentType definition's isolation
+      // field also triggers worktree creation when set to "worktree".
       let worktree: Worktree | undefined;
-      if (agentOptions.isolation === "worktree") {
-        worktree = await createWorktree(baseCwd, `${runId}-${callIndex}-${label}`);
+      const requestedIsolation = agentOptions.isolation ?? agentDef?.isolation;
+      if (requestedIsolation === "worktree") {
+        worktree = await createWorktree(baseCwd, `${runId}-${callIndex}`);
         if (!worktree.isolated) log(`isolation ignored for "${label}" (${worktree.reason})`);
       }
       const runCwd = worktree?.isolated ? worktree.cwd : undefined;
