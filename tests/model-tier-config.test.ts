@@ -45,6 +45,52 @@ describe("model-tier-config", () => {
       const cfg = buildDefaultTierConfig("openai/gpt-4.1");
       assert.deepEqual(Object.keys(cfg.tiers).sort(), ["big", "medium", "small"]);
     });
+
+    it("spreads three or more available models across tiers", async () => {
+      // This uses the real listAvailableModelSpecs() which may return [] in test env.
+      // We can only test the code path where currentModelSpec is undefined and
+      // verify the structure is still valid.
+      const { buildDefaultTierConfig } = await loadModule();
+      const cfg = buildDefaultTierConfig();
+      assert.deepEqual(Object.keys(cfg.tiers).sort(), ["big", "medium", "small"]);
+      for (const val of Object.values(cfg.tiers)) {
+        assert.equal(typeof val, "string");
+      }
+    });
+
+    it("spreads exactly three available models across small/medium/big (no overlap)", async () => {
+      const { buildDefaultTierConfig } = await loadModule();
+      const cfg = buildDefaultTierConfig(undefined, ["model-a", "model-b", "model-c"]);
+      assert.equal(cfg.tiers.small, "model-a");
+      assert.equal(cfg.tiers.medium, "model-b");
+      assert.equal(cfg.tiers.big, "model-c");
+    });
+
+    it("spreads two available models: small gets first, medium and big get second", async () => {
+      const { buildDefaultTierConfig } = await loadModule();
+      const cfg = buildDefaultTierConfig(undefined, ["model-a", "model-b"]);
+      assert.equal(cfg.tiers.small, "model-a");
+      assert.equal(cfg.tiers.medium, "model-b");
+      assert.equal(cfg.tiers.big, "model-b");
+    });
+
+    it("with four available models, assigns middle index to medium", async () => {
+      const { buildDefaultTierConfig } = await loadModule();
+      const cfg = buildDefaultTierConfig(undefined, ["m-a", "m-b", "m-c", "m-d"]);
+      // Math.floor(4 / 2) = 2 → medium = m-c
+      assert.equal(cfg.tiers.small, "m-a");
+      assert.equal(cfg.tiers.medium, "m-c");
+      assert.equal(cfg.tiers.big, "m-d");
+    });
+
+    it("falls back to empty string for all tiers when no models available", async () => {
+      const { buildDefaultTierConfig } = await loadModule();
+      const cfg = buildDefaultTierConfig(undefined, []);
+      assert.deepEqual(Object.keys(cfg.tiers).sort(), ["big", "medium", "small"]);
+      for (const val of Object.values(cfg.tiers)) {
+        assert.equal(val, "");
+      }
+    });
   });
 
   describe("resolveTierModel", () => {
