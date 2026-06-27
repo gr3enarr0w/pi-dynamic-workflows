@@ -32,6 +32,8 @@ export interface WorkflowStorage {
   list(): SavedWorkflow[];
   /** Delete a saved workflow. */
   delete(name: string, location?: "project" | "user"): boolean;
+  /** Rename a saved workflow. Returns true if renamed, false if not found or name conflicts. */
+  rename(oldName: string, newName: string, location?: "project" | "user"): boolean;
 }
 
 export function isSafeSavedWorkflowName(name: string): boolean {
@@ -72,6 +74,10 @@ export function createWorkflowStorage(cwd: string): WorkflowStorage {
     assertSafeSavedWorkflowName(name);
     return join(legacyProjectDir, `${name}.json`);
   };
+  const workflowExists = (name: string): boolean =>
+    existsSync(workflowPath(name, "project")) ||
+    existsSync(legacyProjectWorkflowPath(name)) ||
+    existsSync(workflowPath(name, "user"));
 
   const loadFromFile = (path: string, location: "project" | "user"): SavedWorkflow | null => {
     try {
@@ -166,6 +172,45 @@ export function createWorkflowStorage(cwd: string): WorkflowStorage {
       }
 
       return deleted;
+    },
+
+    rename(oldName: string, newName: string, location?: "project" | "user"): boolean {
+      if (!isSafeSavedWorkflowName(oldName) || !isSafeSavedWorkflowName(newName)) return false;
+      if (oldName === newName) return false;
+      const locs = location ? [location] : (["project", "user"] as const);
+      for (const loc of locs) {
+        const path = workflowPath(oldName, loc);
+        const wf = loadFromFile(path, loc);
+        if (!wf) continue;
+        // Check the target name against all load/list locations so renaming
+        // cannot hide or shadow an existing saved workflow.
+        const newPath = workflowPath(newName, loc);
+        if (workflowExists(newName)) return false;
+        const dir = loc === "project" ? projectDir : userDir;
+        ensureDir(dir);
+        const renamed: SavedWorkflow = { ...wf, name: newName, path: newPath };
+        writeFileSync(newPath, JSON.stringify(renamed, null, 2));
+        unlinkSync(path);
+        return true;
+      }
+      // Legacy project directory: workflows saved before the new project-scoped
+      // path was introduced live in legacyProjectDir. The delete method already
+      // handles this dir; rename must do the same so that a legacy-dir workflow
+      // can be renamed without requiring a manual storage migration.
+      if (!location || location === "project") {
+        const legacyPath = legacyProjectWorkflowPath(oldName);
+        const wf = loadFromFile(legacyPath, "project");
+        if (wf) {
+          if (workflowExists(newName)) return false;
+          const newPath = workflowPath(newName, "project");
+          ensureDir(projectDir);
+          const renamed: SavedWorkflow = { ...wf, name: newName, path: newPath };
+          writeFileSync(newPath, JSON.stringify(renamed, null, 2));
+          unlinkSync(legacyPath);
+          return true;
+        }
+      }
+      return false;
     },
   };
 }
